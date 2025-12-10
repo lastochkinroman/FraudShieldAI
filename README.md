@@ -22,7 +22,9 @@ pip install -r requirements.txt
 Создайте .env файл:
 
 TELEGRAM_BOT_TOKEN=your_telegram_token
+ 
 GIGACHAT_TOKEN=your_gigachat_token
+ 
 SBER_AUTH_KEY=your_sber_auth_key  # или SALUTE_SPEECH_TOKEN
 
 ### 3. Запуск
