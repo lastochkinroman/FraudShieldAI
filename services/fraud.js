@@ -2,6 +2,39 @@ const axios = require('axios');
 const config = require('../config/config');
 const { getGigaChatToken } = require('../config/tokens');
 
+const SYSTEM_PROMPT = `Ты - AI-ассистент оператора колл-центра банка. Твоя задача - анализировать расшифровки телефонных разговоров и выявлять признаки мошенничества.
+
+КРИТИЧЕСКИЕ ПРИЗНАКИ МОШЕННИЧЕСТВА:
+1. ДАВЛЕНИЕ ПО ВРЕМЕНИ - клиент торопится, упоминает срочность, дедлайны
+2. УПОМИНАНИЕ "СЛУЖБЫ БЕЗОПАСНОСТИ" - клиент говорит, что ему звонили из банка
+3. ПРОСЬБА НЕ БЛОКИРОВАТЬ - клиент просит не выполнять стандартные проверки
+4. ПЕРЕВОД НА "ЗАЩИТНЫЙ СЧЕТ" - упоминание нестандартных счетов
+5. ПОДРОБНЫЕ ИНСТРУКЦИИ - клиент говорит по чьей-то указке
+6. ЭМОЦИОНАЛЬНОЕ СОСТОЯНИЕ - паника, страх, агрессия
+7. НЕЛОГИЧНЫЕ ОБЪЯСНЕНИЯ - странные причины для перевода
+8. УГРОЗЫ УЙТИ В ДРУГОЙ БАНК - если оператор задает вопросы
+
+Проанализируй текст и ответь в формате JSON:
+{
+  "isFraudDetected": boolean,
+  "confidence": number от 0 до 100,
+  "detectedMarkers": [массив найденных маркеров],
+  "riskLevel": "low" | "medium" | "high" | "critical",
+  "recommendation": "текст рекомендации для оператора",
+  "suggestedAction": "конкретное действие для оператора"
+}`;
+
+function createDefaultResponse(isFraudDetected = false, confidence = 0, detectedMarkers = [], riskLevel = 'low', recommendation = '', suggestedAction = '') {
+  return {
+    isFraudDetected,
+    confidence,
+    detectedMarkers,
+    riskLevel,
+    recommendation,
+    suggestedAction
+  };
+}
+
 async function callGigaChatAPI(messages) {
   try {
     const token = await getGigaChatToken();
@@ -37,33 +70,11 @@ async function callGigaChatAPI(messages) {
 }
 
 async function analyzeForFraud(text) {
-  const systemPrompt = `Ты - AI-ассистент оператора колл-центра банка. Твоя задача - анализировать расшифровки телефонных разговоров и выявлять признаки мошенничества.
-
-КРИТИЧЕСКИЕ ПРИЗНАКИ МОШЕННИЧЕСТВА:
-1. ДАВЛЕНИЕ ПО ВРЕМЕНИ - клиент торопится, упоминает срочность, дедлайны
-2. УПОМИНАНИЕ "СЛУЖБЫ БЕЗОПАСНОСТИ" - клиент говорит, что ему звонили из банка
-3. ПРОСЬБА НЕ БЛОКИРОВАТЬ - клиент просит не выполнять стандартные проверки
-4. ПЕРЕВОД НА "ЗАЩИТНЫЙ СЧЕТ" - упоминание нестандартных счетов
-5. ПОДРОБНЫЕ ИНСТРУКЦИИ - клиент говорит по чьей-то указке
-6. ЭМОЦИОНАЛЬНОЕ СОСТОЯНИЕ - паника, страх, агрессия
-7. НЕЛОГИЧНЫЕ ОБЪЯСНЕНИЯ - странные причины для перевода
-8. УГРОЗЫ УЙТИ В ДРУГОЙ БАНК - если оператор задает вопросы
-
-Проанализируй текст и ответь в формате JSON:
-{
-  "isFraudDetected": boolean,
-  "confidence": number от 0 до 100,
-  "detectedMarkers": [массив найденных маркеров],
-  "riskLevel": "low" | "medium" | "high" | "critical",
-  "recommendation": "текст рекомендации для оператора",
-  "suggestedAction": "конкретное действие для оператора"
-}`;
-
   try {
     const response = await callGigaChatAPI([
       {
         role: "system",
-        content: systemPrompt
+        content: SYSTEM_PROMPT
       },
       {
         role: "user",
@@ -75,27 +86,27 @@ async function analyzeForFraud(text) {
     if (jsonMatch) {
       return JSON.parse(jsonMatch[0]);
     } else {
-      return {
-        isFraudDetected: response.toLowerCase().includes('мошен') ||
-                         response.toLowerCase().includes('опасность') ||
-                         response.toLowerCase().includes('fraud'),
-        confidence: 70,
-        detectedMarkers: ['Анализ выполнен, но формат ответа некорректен'],
-        riskLevel: 'medium',
-        recommendation: response,
-        suggestedAction: 'Проявить повышенную бдительность, задать дополнительные вопросы'
-      };
+      return createDefaultResponse(
+        response.toLowerCase().includes('мошен') ||
+        response.toLowerCase().includes('опасность') ||
+        response.toLowerCase().includes('fraud'),
+        70,
+        ['Анализ выполнен, но формат ответа некорректен'],
+        'medium',
+        response,
+        'Проявить повышенную бдительность, задать дополнительные вопросы'
+      );
     }
   } catch (error) {
     console.error('Ошибка анализа:', error);
-    return {
-      isFraudDetected: false,
-      confidence: 0,
-      detectedMarkers: ['Ошибка анализа'],
-      riskLevel: 'low',
-      recommendation: 'Не удалось проанализировать запись. Проведите стандартную проверку.',
-      suggestedAction: 'Следовать стандартному протоколу проверки клиента'
-    };
+    return createDefaultResponse(
+      false,
+      0,
+      ['Ошибка анализа'],
+      'low',
+      'Не удалось проанализировать запись. Проведите стандартную проверку.',
+      'Следовать стандартному протоколу проверки клиента'
+    );
   }
 }
 
